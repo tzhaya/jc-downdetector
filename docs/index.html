@@ -133,6 +133,147 @@
         font-size: 1.1rem;
       }
 
+      .history-panel {
+        margin-bottom: 18px;
+        padding: 18px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .panel-head h2 {
+        margin: 0;
+        font-size: 1.05rem;
+      }
+
+      .range-controls {
+        display: inline-flex;
+        gap: 4px;
+        padding: 3px;
+        background: #f3f5f8;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+      }
+
+      .range-button {
+        min-width: 54px;
+        padding: 6px 9px;
+        color: var(--muted);
+        background: transparent;
+        border: 0;
+        border-radius: 5px;
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      .range-button[aria-pressed="true"] {
+        color: var(--text);
+        background: var(--panel);
+        box-shadow: 0 1px 4px rgba(32, 36, 44, 0.12);
+      }
+
+      .chart-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcfe;
+      }
+
+      .chart {
+        display: block;
+        width: 100%;
+        min-width: 720px;
+        height: auto;
+      }
+
+      .axis,
+      .grid,
+      .threshold {
+        vector-effect: non-scaling-stroke;
+      }
+
+      .axis {
+        stroke: #8a94a3;
+      }
+
+      .grid {
+        stroke: #e5e9f0;
+      }
+
+      .threshold {
+        stroke-dasharray: 6 5;
+      }
+
+      .chart-label {
+        fill: var(--muted);
+        font-size: 12px;
+      }
+
+      .chart-empty {
+        padding: 34px 16px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin: 12px 0 0;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      .legend-swatch {
+        width: 14px;
+        height: 3px;
+        border-radius: 999px;
+      }
+
+      .history-stats {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(110px, 1fr));
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .stat {
+        padding: 9px 10px;
+        background: #f3f5f8;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+
+      .stat span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 750;
+      }
+
+      .stat strong {
+        display: block;
+        margin-top: 2px;
+        font-size: 1rem;
+      }
+
       .table-wrap {
         overflow-x: auto;
         background: var(--panel);
@@ -243,6 +384,24 @@
         .counts {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
+
+        .panel-head {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .range-controls {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .range-button {
+          min-width: 0;
+        }
+
+        .history-stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
       }
     </style>
   </head>
@@ -261,6 +420,23 @@
       <section class="summary" id="summary" data-level="UNKNOWN">
         <p class="summary-message" id="summaryMessage">最新状態を読み込んでいます。</p>
         <div class="counts" id="counts"></div>
+      </section>
+
+      <section class="history-panel" aria-label="response history">
+        <div class="panel-head">
+          <h2>Response Trend</h2>
+          <div class="range-controls" id="rangeControls" aria-label="history range">
+            <button class="range-button" type="button" data-range="24h" aria-pressed="true">24h</button>
+            <button class="range-button" type="button" data-range="7d" aria-pressed="false">7d</button>
+            <button class="range-button" type="button" data-range="30d" aria-pressed="false">30d</button>
+            <button class="range-button" type="button" data-range="all" aria-pressed="false">all</button>
+          </div>
+        </div>
+        <div class="chart-wrap" id="chartWrap">
+          <div class="chart-empty">Loading response history</div>
+        </div>
+        <div class="legend" id="chartLegend"></div>
+        <div class="history-stats" id="historyStats"></div>
       </section>
 
       <section class="table-wrap" aria-label="site status">
@@ -295,9 +471,51 @@
       const summaryEl = document.querySelector("#summary");
       const summaryMessageEl = document.querySelector("#summaryMessage");
       const resultsEl = document.querySelector("#results");
+      const chartWrapEl = document.querySelector("#chartWrap");
+      const chartLegendEl = document.querySelector("#chartLegend");
+      const historyStatsEl = document.querySelector("#historyStats");
+      const rangeControlsEl = document.querySelector("#rangeControls");
+      const ranges = {
+        "24h": 24 * 60 * 60 * 1000,
+        "7d": 7 * 24 * 60 * 60 * 1000,
+        "30d": 30 * 24 * 60 * 60 * 1000,
+        all: null,
+      };
+      const seriesColors = ["#1a5fb4", "#16845b", "#b64f0a", "#7b3f98", "#007d8a", "#b04566"];
+      let historyRecords = [];
+      let activeRange = "24h";
 
       function text(value, fallback = "-") {
         return value === null || value === undefined || value === "" ? fallback : String(value);
+      }
+
+      function escapeHtml(value) {
+        return text(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function escapeAttr(value) {
+        return escapeHtml(value).replace(/`/g, "&#96;");
+      }
+
+      function formatSeconds(value) {
+        return Number.isFinite(value) ? `${value.toFixed(3)} sec` : "-";
+      }
+
+      function percentile(values, percent) {
+        if (values.length === 0) {
+          return null;
+        }
+        const ordered = [...values].sort((a, b) => a - b);
+        const index = (ordered.length - 1) * (percent / 100);
+        const lower = Math.floor(index);
+        const upper = Math.min(lower + 1, ordered.length - 1);
+        const weight = index - lower;
+        return ordered[lower] * (1 - weight) + ordered[upper] * weight;
       }
 
       function renderCounts(counts = {}) {
@@ -314,7 +532,7 @@
         summaryEl.dataset.level = "UNKNOWN";
         summaryMessageEl.textContent = message;
         renderCounts({});
-        resultsEl.innerHTML = `<tr><td colspan="6" class="empty">${message}</td></tr>`;
+        resultsEl.innerHTML = `<tr><td colspan="6" class="empty">${escapeHtml(message)}</td></tr>`;
       }
 
       function renderLatest(latest) {
@@ -324,11 +542,11 @@
 
         checkedAtEl.textContent = `Last checked: ${checkedAt}`;
         summaryEl.dataset.level = summary.level || "UNKNOWN";
-        summaryMessageEl.textContent = summary.message || "状態メッセージがありません。";
+        summaryMessageEl.textContent = summary.message || "No status message.";
         renderCounts(summary.counts || {});
 
         if (results.length === 0) {
-          resultsEl.innerHTML = '<tr><td colspan="6" class="empty">監視対象がありません。</td></tr>';
+          resultsEl.innerHTML = '<tr><td colspan="6" class="empty">No targets available.</td></tr>';
           return;
         }
 
@@ -340,16 +558,187 @@
           const primary = result.primary ? " <span class=\"muted\">primary</span>" : "";
           return `
             <tr>
-              <td><strong>${text(result.name)}</strong>${primary}</td>
-              <td><a href="${text(result.url, "#")}" target="_blank" rel="noopener noreferrer">${text(result.url)}</a></td>
-              <td>${text(result.status_code)}</td>
+              <td><strong>${escapeHtml(result.name)}</strong>${primary}</td>
+              <td><a href="${escapeAttr(result.url || "#")}" target="_blank" rel="noopener noreferrer">${escapeHtml(result.url)}</a></td>
+              <td>${escapeHtml(result.status_code)}</td>
               <td>${elapsed}</td>
-              <td><span class="badge ${state}">${state}</span></td>
-              <td>${text(result.error)}</td>
+              <td><span class="badge ${escapeAttr(state)}">${escapeHtml(state)}</span></td>
+              <td>${escapeHtml(result.error)}</td>
             </tr>
           `;
         }).join("");
       }
+
+      function parseHistory(jsonl) {
+        return jsonl
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+          .map((record) => ({ ...record, checkedAtDate: new Date(record.checked_at) }))
+          .filter((record) => !Number.isNaN(record.checkedAtDate.getTime()))
+          .sort((a, b) => a.checkedAtDate.getTime() - b.checkedAtDate.getTime());
+      }
+
+      function getFilteredHistory() {
+        if (historyRecords.length === 0 || ranges[activeRange] === null) {
+          return historyRecords;
+        }
+        const latestTime = Math.max(...historyRecords.map((record) => record.checkedAtDate.getTime()));
+        const fromTime = latestTime - ranges[activeRange];
+        return historyRecords.filter((record) => record.checkedAtDate.getTime() >= fromTime);
+      }
+
+      function buildSeries(records) {
+        const sites = new Map();
+        for (const record of records) {
+          const results = Array.isArray(record.results) ? record.results : [];
+          for (const result of results) {
+            const key = result.url || result.name;
+            if (!key) {
+              continue;
+            }
+            if (!sites.has(key)) {
+              sites.set(key, {
+                key,
+                name: text(result.name, key),
+                points: [],
+              });
+            }
+            const elapsed = Number(result.elapsed_sec);
+            sites.get(key).points.push({
+              time: record.checkedAtDate.getTime(),
+              elapsed: Number.isFinite(elapsed) ? elapsed : null,
+              state: text(result.state, "UNKNOWN"),
+            });
+          }
+        }
+        return [...sites.values()].map((site, index) => ({
+          ...site,
+          color: seriesColors[index % seriesColors.length],
+          points: site.points.sort((a, b) => a.time - b.time),
+        }));
+      }
+
+      function renderHistory() {
+        const records = getFilteredHistory();
+        const series = buildSeries(records);
+        const values = series.flatMap((site) => site.points.map((point) => point.elapsed).filter(Number.isFinite));
+        const latestRecord = historyRecords[historyRecords.length - 1] || {};
+        const slowSec = Number(latestRecord.thresholds?.slow_sec || 5);
+        const verySlowSec = Number(latestRecord.thresholds?.very_slow_sec || 15);
+
+        if (records.length === 0 || values.length === 0) {
+          chartWrapEl.innerHTML = '<div class="chart-empty">No response history available</div>';
+          chartLegendEl.innerHTML = "";
+          renderHistoryStats([]);
+          return;
+        }
+
+        const width = 960;
+        const height = 360;
+        const margin = { top: 24, right: 28, bottom: 48, left: 62 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        const minTime = Math.min(...records.map((record) => record.checkedAtDate.getTime()));
+        const maxTime = Math.max(...records.map((record) => record.checkedAtDate.getTime()));
+        const timeSpan = Math.max(maxTime - minTime, 1);
+        const maxValue = Math.max(...values, slowSec, verySlowSec);
+        const yMax = Math.max(1, Math.ceil(maxValue * 1.15));
+        const x = (time) => margin.left + ((time - minTime) / timeSpan) * plotWidth;
+        const y = (value) => margin.top + plotHeight - (value / yMax) * plotHeight;
+        const yTicks = Array.from({ length: 5 }, (_, index) => (yMax / 4) * index);
+        const xTicks = Array.from({ length: 4 }, (_, index) => minTime + (timeSpan / 3) * index);
+        const thresholdLines = [
+          { label: "SLOW", value: slowSec, color: "#9a6a00" },
+          { label: "VERY_SLOW", value: verySlowSec, color: "#b64f0a" },
+        ].filter((line) => line.value <= yMax);
+
+        const lineMarkup = series.map((site) => {
+          const finitePoints = site.points.filter((point) => Number.isFinite(point.elapsed));
+          if (finitePoints.length === 0) {
+            return "";
+          }
+          const path = finitePoints
+            .map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.time).toFixed(1)} ${y(point.elapsed).toFixed(1)}`)
+            .join(" ");
+          const circles = finitePoints.map((point) => `
+            <circle cx="${x(point.time).toFixed(1)}" cy="${y(point.elapsed).toFixed(1)}" r="3.2" fill="${site.color}">
+              <title>${escapeHtml(`${site.name}: ${formatSeconds(point.elapsed)} (${point.state})`)}</title>
+            </circle>
+          `).join("");
+
+          return `
+            <path d="${path}" fill="none" stroke="${site.color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"></path>
+            ${circles}
+          `;
+        }).join("");
+
+        chartWrapEl.innerHTML = `
+          <svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="response time history chart">
+            <rect x="0" y="0" width="${width}" height="${height}" fill="#fbfcfe"></rect>
+            ${yTicks.map((tick) => `
+              <line class="grid" x1="${margin.left}" y1="${y(tick).toFixed(1)}" x2="${width - margin.right}" y2="${y(tick).toFixed(1)}"></line>
+              <text class="chart-label" x="${margin.left - 10}" y="${(y(tick) + 4).toFixed(1)}" text-anchor="end">${tick.toFixed(tick >= 10 ? 0 : 1)}s</text>
+            `).join("")}
+            ${xTicks.map((tick) => `
+              <text class="chart-label" x="${x(tick).toFixed(1)}" y="${height - 16}" text-anchor="middle">${new Date(tick).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</text>
+            `).join("")}
+            ${thresholdLines.map((line) => `
+              <line class="threshold" x1="${margin.left}" y1="${y(line.value).toFixed(1)}" x2="${width - margin.right}" y2="${y(line.value).toFixed(1)}" stroke="${line.color}"></line>
+              <text class="chart-label" x="${width - margin.right - 4}" y="${(y(line.value) - 6).toFixed(1)}" text-anchor="end">${line.label}</text>
+            `).join("")}
+            <line class="axis" x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}"></line>
+            <line class="axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${height - margin.bottom}"></line>
+            ${lineMarkup}
+          </svg>
+        `;
+
+        chartLegendEl.innerHTML = series.map((site) => `
+          <span class="legend-item">
+            <span class="legend-swatch" style="background: ${site.color}"></span>
+            ${escapeHtml(site.name)}
+          </span>
+        `).join("");
+        renderHistoryStats(values, records, series, slowSec);
+      }
+
+      function renderHistoryStats(values, records = [], series = [], slowSec = 5) {
+        const slowCount = series.reduce((count, site) => (
+          count + site.points.filter((point) => Number.isFinite(point.elapsed) && point.elapsed >= slowSec).length
+        ), 0);
+        const stats = [
+          ["Records", records.length || "-"],
+          ["Samples", values.length || "-"],
+          ["p50", formatSeconds(percentile(values, 50))],
+          ["p95", formatSeconds(percentile(values, 95))],
+          ["Slow+", values.length ? slowCount : "-"],
+        ];
+        historyStatsEl.innerHTML = stats.map(([label, value]) => `
+          <div class="stat">
+            <span>${label}</span>
+            <strong>${value}</strong>
+          </div>
+        `).join("");
+      }
+
+      function renderHistoryError(message) {
+        chartWrapEl.innerHTML = `<div class="chart-empty">${escapeHtml(message)}</div>`;
+        chartLegendEl.innerHTML = "";
+        renderHistoryStats([]);
+      }
+
+      rangeControlsEl.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-range]");
+        if (!button) {
+          return;
+        }
+        activeRange = button.dataset.range;
+        for (const rangeButton of rangeControlsEl.querySelectorAll("[data-range]")) {
+          rangeButton.setAttribute("aria-pressed", String(rangeButton === button));
+        }
+        renderHistory();
+      });
 
       fetch("latest.json", { cache: "no-store" })
         .then((response) => {
@@ -359,7 +748,20 @@
           return response.json();
         })
         .then(renderLatest)
-        .catch(() => renderError("latest.json を読み込めませんでした。"));
+        .catch(() => renderError("latest.json could not be loaded"));
+
+      fetch("history.jsonl", { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`history.jsonl returned ${response.status}`);
+          }
+          return response.text();
+        })
+        .then((jsonl) => {
+          historyRecords = parseHistory(jsonl);
+          renderHistory();
+        })
+        .catch(() => renderHistoryError("history.jsonl could not be loaded"));
     </script>
   </body>
 </html>
