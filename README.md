@@ -25,13 +25,16 @@ python scripts/check_jairo.py
 
 ## Targets
 
-初期状態では JIRCAS のみを対象にしています。
+初期状態では国際農研と農研機構を対象にしています。
 
 ```yaml
 targets:
-  - name: JIRCAS
+  - name: 国際農研機関リポジトリ
     url: https://jircas.repo.nii.ac.jp/
     primary: true
+  - name: 農研機構機関リポジトリ
+    url: https://repository.naro.go.jp/
+    primary: false
 ```
 
 複数サイトへ拡張する場合は、同じ形式で `targets.yml` に追加します。アクセス負荷を避けるため、各サイトのトップページへ順番に1回だけ GET します。
