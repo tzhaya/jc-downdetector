@@ -42,8 +42,11 @@
         <div class="history-stats" id="historyStats"></div>
       </section>
 
-      <section class="recent-errors" id="recentErrors" aria-labelledby="recentErrorsTitle" hidden>
-        <h2 id="recentErrorsTitle">過去7日間に検知したHTTPエラー/Timeout</h2>
+      <details class="recent-errors" id="recentErrors" hidden>
+        <summary class="recent-errors-summary">
+          <span class="recent-errors-title">過去7日間に検知したHTTPエラー/Timeout</span>
+          <span class="recent-errors-count" id="recentErrorsCount"></span>
+        </summary>
         <p>過去7日間にサーバーが返した 500、502、503、504 エラーと、Timeout の発生回数を集計しています。</p>
         <div class="table-wrap">
           <table>
@@ -58,7 +61,7 @@
             <tbody id="recentErrorResults"></tbody>
           </table>
         </div>
-      </section>
+      </details>
 
       <section class="table-wrap" aria-label="site status">
         <table>
