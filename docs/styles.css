@@ -521,8 +521,10 @@ h1 {
 
 a:focus-visible,
 button:focus-visible {
-  outline: 4px solid var(--focus);
+  outline: 4px solid #000;
   outline-offset: 2px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--focus);
 }
 
 .chart-wrap {
